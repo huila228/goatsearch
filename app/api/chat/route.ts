@@ -14,57 +14,73 @@ import {
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  const {
-    messages,
-    telegramInitData,
-  }: {
-    messages: UIMessage[];
-    telegramInitData?: string;
-  } = await req.json();
+  try {
+    const {
+      messages,
+      telegramInitData,
+    }: {
+      messages: UIMessage[];
+      telegramInitData?: string;
+    } = await req.json();
 
-  const session = getTelegramSession(telegramInitData);
-  const lastUserText = getLastUserText(messages);
-  const shouldUseSearch = isSearchIntentText(lastUserText);
-  const searchTools = {
-    web_search: xai.tools.webSearch({
-      enableImageUnderstanding: true,
-    }),
-    x_search: xai.tools.xSearch({
-      enableImageUnderstanding: true,
-      enableVideoUnderstanding: true,
-    }),
-  } as unknown as ToolSet;
+    const session = getTelegramSession(telegramInitData);
+    const lastUserText = getLastUserText(messages);
+    const shouldUseSearch = isSearchIntentText(lastUserText);
+    const searchTools = {
+      web_search: xai.tools.webSearch({
+        enableImageUnderstanding: true,
+      }),
+      x_search: xai.tools.xSearch({
+        enableImageUnderstanding: true,
+        enableVideoUnderstanding: true,
+      }),
+    } as unknown as ToolSet;
 
-  const result = streamText({
-    model: defaultModel,
-    system: buildSystemPrompt(session.user?.first_name, shouldUseSearch),
-    messages: await convertToModelMessages(messages),
-    tools: shouldUseSearch ? searchTools : undefined,
-    experimental_transform: smoothStream({
-      delayInMs: 24,
-      chunking: "word",
-    }),
-    experimental_telemetry: {
-      isEnabled: false,
-    },
-  });
+    const result = streamText({
+      model: defaultModel,
+      system: buildSystemPrompt(session.user?.first_name, shouldUseSearch),
+      messages: await convertToModelMessages(messages),
+      tools: shouldUseSearch ? searchTools : undefined,
+      experimental_transform: smoothStream({
+        delayInMs: 24,
+        chunking: "word",
+      }),
+      experimental_telemetry: {
+        isEnabled: false,
+      },
+    });
 
-  return result.toUIMessageStreamResponse({
-    sendReasoning: shouldUseSearch,
-    onError: (error) => {
-      if (error instanceof Error) {
-        if (error.message.includes("Rate limit")) {
-          return "Rate limit exceeded. Please try again later.";
+    return result.toUIMessageStreamResponse({
+      sendReasoning: shouldUseSearch,
+      onError: (error) => {
+        if (error instanceof Error) {
+          if (error.message.includes("Rate limit")) {
+            return "Rate limit exceeded. Please try again later.";
+          }
+
+          if (error.message) {
+            return error.message;
+          }
         }
+        console.error(error);
+        return "An error occurred.";
+      },
+    });
+  } catch (error) {
+    console.error("Chat route failed before streaming:", error);
 
-        if (error.message) {
-          return error.message;
-        }
-      }
-      console.error(error);
-      return "An error occurred.";
-    },
-  });
+    const message =
+      error instanceof Error && error.message.length > 0
+        ? error.message
+        : "An error occurred before the response started.";
+
+    return new Response(message, {
+      status: 400,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+      },
+    });
+  }
 }
 
 function buildSystemPrompt(firstName?: string, shouldUseSearch = true) {
