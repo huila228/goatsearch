@@ -28,13 +28,28 @@ export type TelegramInitDataUnsafe = {
 export type TelegramWebApp = {
   initData: string;
   initDataUnsafe: TelegramInitDataUnsafe;
+  version?: string;
+  platform?: string;
   colorScheme: 'light' | 'dark';
   themeParams: TelegramThemeParams;
+  viewportHeight?: number;
+  viewportStableHeight?: number;
+  isVerticalSwipesEnabled?: boolean;
+  contentSafeAreaInset?: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+  };
   ready: () => void;
   expand: () => void;
+  disableVerticalSwipes?: () => void;
+  enableVerticalSwipes?: () => void;
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
-  onEvent: (event: string, callback: () => void) => void;
+  setBottomBarColor?: (color: string) => void;
+  onEvent: (event: string, callback: (payload?: unknown) => void) => void;
+  offEvent?: (event: string, callback: (payload?: unknown) => void) => void;
 };
 
 declare global {

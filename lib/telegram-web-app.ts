@@ -15,15 +15,59 @@ export function getTelegramWebApp(): TelegramWebApp | null {
 export function useTelegramThemeSync() {
   useEffect(() => {
     const webApp = getTelegramWebApp();
+    const root = document.documentElement;
+
+    const handleBrowserViewport = () => {
+      const viewportHeight =
+        window.visualViewport?.height ?? window.innerHeight;
+
+      root.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
+      root.style.setProperty(
+        '--app-stable-height',
+        `${Math.round(window.innerHeight)}px`
+      );
+    };
+
     if (!webApp) {
-      return;
+      handleBrowserViewport();
+      window.visualViewport?.addEventListener('resize', handleBrowserViewport);
+      window.addEventListener('resize', handleBrowserViewport);
+
+      return () => {
+        window.visualViewport?.removeEventListener(
+          'resize',
+          handleBrowserViewport
+        );
+        window.removeEventListener('resize', handleBrowserViewport);
+      };
     }
 
     webApp.ready();
     webApp.expand();
 
-    applyTelegramTheme(webApp);
-    webApp.onEvent('themeChanged', () => applyTelegramTheme(webApp));
+    try {
+      webApp.disableVerticalSwipes?.();
+    } catch {
+      // Older Telegram clients may not support this.
+    }
+
+    const syncTheme = () => applyTelegramTheme(webApp);
+    const syncViewport = () => applyTelegramViewport(webApp);
+
+    syncTheme();
+    syncViewport();
+
+    webApp.onEvent('themeChanged', syncTheme);
+    webApp.onEvent('viewportChanged', syncViewport);
+    webApp.onEvent('safeAreaChanged', syncViewport);
+    webApp.onEvent('contentSafeAreaChanged', syncViewport);
+
+    return () => {
+      webApp.offEvent?.('themeChanged', syncTheme);
+      webApp.offEvent?.('viewportChanged', syncViewport);
+      webApp.offEvent?.('safeAreaChanged', syncViewport);
+      webApp.offEvent?.('contentSafeAreaChanged', syncViewport);
+    };
   }, []);
 }
 
@@ -68,9 +112,35 @@ function applyTelegramTheme(webApp: TelegramWebApp) {
   try {
     webApp.setHeaderColor('secondary_bg_color');
     webApp.setBackgroundColor('bg_color');
+    webApp.setBottomBarColor?.(theme.secondary_bg_color || '#101a28');
   } catch {
     // Telegram methods can throw on older clients; visual defaults still work.
   }
+}
+
+function applyTelegramViewport(webApp: TelegramWebApp) {
+  const root = document.documentElement;
+  const viewportHeight =
+    webApp.viewportHeight && Number.isFinite(webApp.viewportHeight)
+      ? webApp.viewportHeight
+      : window.visualViewport?.height ?? window.innerHeight;
+  const stableHeight =
+    webApp.viewportStableHeight && Number.isFinite(webApp.viewportStableHeight)
+      ? webApp.viewportStableHeight
+      : window.innerHeight;
+
+  const safeInset = webApp.contentSafeAreaInset;
+
+  setCssVar(root, '--app-height', `${Math.round(viewportHeight)}px`);
+  setCssVar(root, '--app-stable-height', `${Math.round(stableHeight)}px`);
+  setCssVar(root, '--app-safe-top', `${Math.round(safeInset?.top ?? 0)}px`);
+  setCssVar(root, '--app-safe-right', `${Math.round(safeInset?.right ?? 0)}px`);
+  setCssVar(
+    root,
+    '--app-safe-bottom',
+    `${Math.round(safeInset?.bottom ?? 0)}px`
+  );
+  setCssVar(root, '--app-safe-left', `${Math.round(safeInset?.left ?? 0)}px`);
 }
 
 function setCssVar(root: HTMLElement, name: string, value: string) {

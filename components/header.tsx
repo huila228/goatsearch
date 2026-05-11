@@ -1,8 +1,12 @@
-import { Shield } from "lucide-react";
+import { List } from "lucide-react";
 
 export const Header = ({
+  onOpenHistory,
+  historyOpen = false,
   telegramUserName,
 }: {
+  onOpenHistory?: () => void;
+  historyOpen?: boolean;
   telegramUserName?: string;
 }) => {
   void telegramUserName;
@@ -18,10 +22,11 @@ export const Header = ({
 
         <button
           type="button"
-          aria-label="VPN"
+          aria-label="История диалогов"
+          onClick={onOpenHistory}
           className="flex size-11 items-center justify-center rounded-full border border-white/14 bg-white/[0.055] text-white/78 shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-colors hover:bg-white/[0.11] hover:text-white"
         >
-          <Shield className="size-[18px]" />
+          <List className={historyOpen ? "size-[18px] text-white" : "size-[18px]"} />
         </button>
       </div>
     </div>

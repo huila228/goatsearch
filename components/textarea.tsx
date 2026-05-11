@@ -90,9 +90,9 @@ export const Textarea = ({
         <ShadcnTextarea
           className="min-h-[56px] resize-none border-0 bg-transparent px-0 py-0 text-[17px] leading-7 text-white shadow-none placeholder:text-white/40 focus-visible:border-0 focus-visible:bg-transparent focus-visible:ring-0"
           value={input}
-          autoFocus
           rows={1}
           placeholder=""
+          enterKeyHint="search"
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           onChange={handleInputChange}
@@ -133,11 +133,11 @@ export const Textarea = ({
   return (
     <div className="relative w-full pt-1">
       <ShadcnTextarea
-        className="min-h-[96px] w-full resize-none rounded-[28px] border border-white/10 bg-[#121212] pr-16 pt-4 pb-4 text-[15px] leading-6 text-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] placeholder:text-white/40 transition-colors focus-visible:border-white/15 focus-visible:bg-[#151515] focus-visible:ring-0"
+        className="min-h-[96px] w-full resize-none rounded-[28px] border border-white/10 bg-[#121212] pr-16 pt-4 pb-4 text-[16px] leading-6 text-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] placeholder:text-white/40 transition-colors focus-visible:border-white/15 focus-visible:bg-[#151515] focus-visible:ring-0 sm:text-[15px]"
         value={input}
-        autoFocus
         rows={3}
         placeholder={"Спрашивай что угодно"}
+        enterKeyHint="search"
         onChange={handleInputChange}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {

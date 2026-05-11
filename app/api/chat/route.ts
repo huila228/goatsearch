@@ -1,9 +1,15 @@
 import { defaultModel } from "@/ai/providers";
+import {
+  consumeChatUserMessageQuota,
+  getChatStoreUserKey,
+  saveChatConversationForUser,
+} from "@/lib/chat-store";
 import { xai } from "@ai-sdk/xai";
 import { getTelegramSession } from "@/lib/telegram-auth";
 import { getLastUserText, isSearchIntentText } from "@/lib/query-intent";
 import {
   convertToModelMessages,
+  generateId,
   smoothStream,
   streamText,
   type ToolSet,
@@ -16,14 +22,21 @@ export const maxDuration = 30;
 export async function POST(req: Request) {
   try {
     const {
+      conversationId,
       messages,
       telegramInitData,
     }: {
+      conversationId?: string;
       messages: UIMessage[];
       telegramInitData?: string;
     } = await req.json();
 
     const session = getTelegramSession(telegramInitData);
+    const userKey = getChatStoreUserKey({
+      source: session.source,
+      telegramUserId: session.user?.id,
+    });
+    const latestMessage = messages[messages.length - 1];
     const lastUserText = getLastUserText(messages);
     const shouldUseSearch = isSearchIntentText(lastUserText);
     const searchTools = {
@@ -35,6 +48,14 @@ export async function POST(req: Request) {
         enableVideoUnderstanding: true,
       }),
     } as unknown as ToolSet;
+
+    if (session.source === "telegram" && latestMessage?.role === "user") {
+      await consumeChatUserMessageQuota(userKey, latestMessage.id);
+    }
+
+    if (conversationId) {
+      await saveChatConversationForUser(userKey, conversationId, messages);
+    }
 
     const result = streamText({
       model: defaultModel,
@@ -51,7 +72,20 @@ export async function POST(req: Request) {
     });
 
     return result.toUIMessageStreamResponse({
+      generateMessageId: generateId,
+      originalMessages: messages,
       sendReasoning: shouldUseSearch,
+      onFinish: async ({ messages: finishedMessages }) => {
+        if (!conversationId) {
+          return;
+        }
+
+        await saveChatConversationForUser(
+          userKey,
+          conversationId,
+          finishedMessages,
+        );
+      },
       onError: (error) => {
         if (error instanceof Error) {
           if (error.message.includes("Rate limit")) {
