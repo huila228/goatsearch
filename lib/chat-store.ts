@@ -4,23 +4,27 @@ import path from "node:path";
 import type { UIMessage } from "ai";
 
 import {
-  DAILY_MESSAGE_LIMIT,
-  MONTHLY_MESSAGE_LIMIT,
+  SUBSCRIBER_CHAT_LIMIT,
+  SUBSCRIBER_DAILY_TOTAL_LIMIT,
+  SUBSCRIBER_SEARCH_LIMIT,
   type ChatConversation,
   type ChatConversationSummary,
+  type GoatAccessStatus,
+  type GoatUsageKind,
 } from "@/lib/chat-history";
 
 type ChatStoreUser = {
   conversations: ChatConversation[];
   usage: {
-    dailyCounts: Record<string, number>;
-    monthlyCounts: Record<string, number>;
+    dailyTotals: Record<string, number>;
+    guestLifetimeUsed: number;
+    subscriberUsed: Record<GoatUsageKind, number>;
     countedMessageIds: Record<
       string,
       {
-        dayKey: string;
-        monthKey: string;
         countedAt: string;
+        dayKey: string;
+        usageKind: GoatUsageKind;
       }
     >;
   };
@@ -33,7 +37,6 @@ type ChatStoreFile = {
 const STORE_DIR = path.join(process.cwd(), ".data");
 const STORE_FILE = path.join(STORE_DIR, "chat-store.json");
 const APP_TIME_ZONE = process.env.GOAT_TIME_ZONE ?? "Asia/Novosibirsk";
-
 let mutationQueue = Promise.resolve();
 
 function createEmptyStore(): ChatStoreFile {
@@ -95,33 +98,22 @@ async function mutateStore<T>(
   return nextMutation;
 }
 
-function getNowParts(date = new Date()) {
+function singleLine(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function getDayKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: APP_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-
   const year = parts.find((part) => part.type === "year")?.value ?? "0000";
   const month = parts.find((part) => part.type === "month")?.value ?? "00";
   const day = parts.find((part) => part.type === "day")?.value ?? "00";
 
-  return { year, month, day };
-}
-
-function getDayKey(date = new Date()) {
-  const { year, month, day } = getNowParts(date);
   return `${year}-${month}-${day}`;
-}
-
-function getMonthKey(date = new Date()) {
-  const { year, month } = getNowParts(date);
-  return `${year}-${month}`;
-}
-
-function singleLine(text: string) {
-  return text.replace(/\s+/g, " ").trim();
 }
 
 function clipText(text: string, maxLength: number) {
@@ -186,41 +178,49 @@ function getOrCreateUser(store: ChatStoreFile, userKey: string): ChatStoreUser {
   const existingUser = store.users[userKey];
 
   if (existingUser) {
+    const usage = existingUser.usage as Partial<ChatStoreUser["usage"]> | undefined;
+
+    existingUser.usage = {
+      countedMessageIds:
+        usage?.countedMessageIds && typeof usage.countedMessageIds === "object"
+          ? usage.countedMessageIds
+          : {},
+      dailyTotals:
+        usage?.dailyTotals && typeof usage.dailyTotals === "object"
+          ? usage.dailyTotals
+          : {},
+      guestLifetimeUsed:
+        typeof usage?.guestLifetimeUsed === "number" ? usage.guestLifetimeUsed : 0,
+      subscriberUsed: {
+        chat:
+          typeof usage?.subscriberUsed?.chat === "number"
+            ? usage.subscriberUsed.chat
+            : 0,
+        search:
+          typeof usage?.subscriberUsed?.search === "number"
+            ? usage.subscriberUsed.search
+            : 0,
+      },
+    };
+
     return existingUser;
   }
 
   const nextUser: ChatStoreUser = {
     conversations: [],
     usage: {
-      dailyCounts: {},
-      monthlyCounts: {},
       countedMessageIds: {},
+      dailyTotals: {},
+      guestLifetimeUsed: 0,
+      subscriberUsed: {
+        chat: 0,
+        search: 0,
+      },
     },
   };
 
   store.users[userKey] = nextUser;
   return nextUser;
-}
-
-function cleanupUsageState(user: ChatStoreUser, now = new Date()) {
-  const currentDayKey = getDayKey(now);
-  const currentMonthKey = getMonthKey(now);
-
-  user.usage.dailyCounts = Object.fromEntries(
-    Object.entries(user.usage.dailyCounts).filter(([key]) => key === currentDayKey),
-  );
-
-  user.usage.monthlyCounts = Object.fromEntries(
-    Object.entries(user.usage.monthlyCounts).filter(
-      ([key]) => key === currentMonthKey,
-    ),
-  );
-
-  user.usage.countedMessageIds = Object.fromEntries(
-    Object.entries(user.usage.countedMessageIds).filter(
-      ([, record]) => record.monthKey === currentMonthKey,
-    ),
-  );
 }
 
 function upsertConversation(
@@ -336,43 +336,96 @@ export async function saveChatConversationForUser(
   });
 }
 
-export async function consumeChatUserMessageQuota(
+function buildLocalSubscriberStatus(user: ChatStoreUser): GoatAccessStatus {
+  const currentDayKey = getDayKey();
+  const usedChat = user.usage.subscriberUsed.chat;
+  const usedDaily = user.usage.dailyTotals[currentDayKey] ?? 0;
+  const usedSearch = user.usage.subscriberUsed.search;
+  const remainingDaily = Math.max(0, SUBSCRIBER_DAILY_TOTAL_LIMIT - usedDaily);
+  const remainingChat = Math.max(0, SUBSCRIBER_CHAT_LIMIT - usedChat);
+  const remainingSearch = Math.max(0, SUBSCRIBER_SEARCH_LIMIT - usedSearch);
+  const noUsageBucketsLeft = remainingChat <= 0 && remainingSearch <= 0;
+  const message =
+    remainingDaily <= 0
+      ? `Дневной лимит исчерпан: ${SUBSCRIBER_DAILY_TOTAL_LIMIT} сообщений.`
+      : noUsageBucketsLeft
+        ? "Лимиты Goat закончились."
+        : undefined;
+
+  return {
+    allowed: remainingDaily > 0 && !noUsageBucketsLeft,
+    daily: {
+      limit: SUBSCRIBER_DAILY_TOTAL_LIMIT,
+      remaining: remainingDaily,
+      used: usedDaily,
+    },
+    limits: {
+      chat: SUBSCRIBER_CHAT_LIMIT,
+      search: SUBSCRIBER_SEARCH_LIMIT,
+    },
+    message,
+    remaining: {
+      chat: remainingChat,
+      search: remainingSearch,
+    },
+    source: "local",
+    tier: "subscriber",
+    used: {
+      chat: usedChat,
+      search: usedSearch,
+    },
+  };
+}
+
+export async function getLocalGoatAccessStatus(userKey: string) {
+  const store = await readStore();
+  const user = getOrCreateUser(store, userKey);
+
+  return buildLocalSubscriberStatus(user);
+}
+
+export async function consumeLocalGoatAccess(
   userKey: string,
   messageId: string,
+  usageKind: GoatUsageKind,
 ) {
   return mutateStore(async (store) => {
     const user = getOrCreateUser(store, userKey);
-    const now = new Date();
-
-    cleanupUsageState(user, now);
+    const dayKey = getDayKey();
 
     if (user.usage.countedMessageIds[messageId]) {
-      return;
+      return buildLocalSubscriberStatus(user);
     }
 
-    const dayKey = getDayKey(now);
-    const monthKey = getMonthKey(now);
-    const usedToday = user.usage.dailyCounts[dayKey] ?? 0;
-    const usedThisMonth = user.usage.monthlyCounts[monthKey] ?? 0;
+    const currentDailyUsage = user.usage.dailyTotals[dayKey] ?? 0;
+    const currentUsage = user.usage.subscriberUsed[usageKind];
+    const usageLimit =
+      usageKind === "search"
+        ? SUBSCRIBER_SEARCH_LIMIT
+        : SUBSCRIBER_CHAT_LIMIT;
 
-    if (usedToday >= DAILY_MESSAGE_LIMIT) {
+    if (currentDailyUsage >= SUBSCRIBER_DAILY_TOTAL_LIMIT) {
       throw new Error(
-        `Дневной лимит исчерпан: ${DAILY_MESSAGE_LIMIT} сообщений в день.`,
+        `Дневной лимит исчерпан: ${SUBSCRIBER_DAILY_TOTAL_LIMIT} сообщений.`,
       );
     }
 
-    if (usedThisMonth >= MONTHLY_MESSAGE_LIMIT) {
+    if (currentUsage >= usageLimit) {
       throw new Error(
-        `Месячный лимит исчерпан: ${MONTHLY_MESSAGE_LIMIT} сообщений в месяц.`,
+        usageKind === "search"
+          ? `Лимит поисковых сообщений исчерпан: ${SUBSCRIBER_SEARCH_LIMIT}.`
+          : `Лимит обычных сообщений исчерпан: ${SUBSCRIBER_CHAT_LIMIT}.`,
       );
     }
 
-    user.usage.dailyCounts[dayKey] = usedToday + 1;
-    user.usage.monthlyCounts[monthKey] = usedThisMonth + 1;
+    user.usage.dailyTotals[dayKey] = currentDailyUsage + 1;
+    user.usage.subscriberUsed[usageKind] = currentUsage + 1;
     user.usage.countedMessageIds[messageId] = {
+      countedAt: new Date().toISOString(),
       dayKey,
-      monthKey,
-      countedAt: now.toISOString(),
+      usageKind,
     };
+
+    return buildLocalSubscriberStatus(user);
   });
 }

@@ -16,6 +16,7 @@ interface InputProps {
   handleInputChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
   isLoading: boolean;
   landing?: boolean;
+  onFocusChange?: (focused: boolean) => void;
   status: string;
   stop: () => void;
 }
@@ -25,6 +26,7 @@ export const Textarea = ({
   handleInputChange,
   isLoading,
   landing = false,
+  onFocusChange,
   status,
   stop,
 }: InputProps) => {
@@ -93,8 +95,21 @@ export const Textarea = ({
           rows={1}
           placeholder=""
           enterKeyHint="search"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={(event) => {
+            setIsFocused(true);
+            onFocusChange?.(true);
+
+            window.requestAnimationFrame(() => {
+              event.currentTarget.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              });
+            });
+          }}
+          onBlur={() => {
+            setIsFocused(false);
+            onFocusChange?.(false);
+          }}
           onChange={handleInputChange}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

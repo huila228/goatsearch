@@ -3,7 +3,10 @@
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { ChatConversationSummary } from "@/lib/chat-history";
+import type {
+  ChatConversationSummary,
+  GoatAccessStatus,
+} from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 
 const DELETE_REVEAL_WIDTH = 96;
@@ -21,6 +24,7 @@ function formatHistoryDate(updatedAt: string) {
 }
 
 export const HistorySheet = ({
+  accessStatus,
   activeConversationId,
   conversations,
   isLoading,
@@ -30,6 +34,7 @@ export const HistorySheet = ({
   onStartNewChat,
   open,
 }: {
+  accessStatus: GoatAccessStatus | null;
   activeConversationId: string | null;
   conversations: ChatConversationSummary[];
   isLoading: boolean;
@@ -137,6 +142,41 @@ export const HistorySheet = ({
             </div>
           )}
         </div>
+
+        {accessStatus ? (
+          <div className="border-t border-white/10 px-4 py-4 sm:px-5">
+            <div className="rounded-[24px] border border-white/8 bg-white/[0.04] px-4 py-3">
+              <div className="text-[13px] font-medium text-white/88">
+                Лимиты Goat
+              </div>
+              <div className="mt-2 space-y-1 text-[12px] leading-5 text-white/50">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Всего за день</span>
+                  <span className="text-white/76">
+                    {accessStatus.daily.remaining} из {accessStatus.daily.limit}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Без поиска</span>
+                  <span className="text-white/76">
+                    {accessStatus.remaining.chat} из {accessStatus.limits.chat}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>С поиском</span>
+                  <span className="text-white/76">
+                    {accessStatus.remaining.search} из {accessStatus.limits.search}
+                  </span>
+                </div>
+              </div>
+              {accessStatus.message ? (
+                <div className="mt-2 text-[11px] leading-4 text-[#ff9da5]">
+                  {accessStatus.message}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </aside>
     </div>
   );

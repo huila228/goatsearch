@@ -1,9 +1,6 @@
 import { defaultModel } from "@/ai/providers";
-import {
-  consumeChatUserMessageQuota,
-  getChatStoreUserKey,
-  saveChatConversationForUser,
-} from "@/lib/chat-store";
+import { consumeGoatAccess, getGoatAccessStatus } from "@/lib/goat-access";
+import { getChatStoreUserKey, saveChatConversationForUser } from "@/lib/chat-store";
 import { xai } from "@ai-sdk/xai";
 import { getTelegramSession } from "@/lib/telegram-auth";
 import { getLastUserText, isSearchIntentText } from "@/lib/query-intent";
@@ -32,13 +29,17 @@ export async function POST(req: Request) {
     } = await req.json();
 
     const session = getTelegramSession(telegramInitData);
-    const userKey = getChatStoreUserKey({
-      source: session.source,
-      telegramUserId: session.user?.id,
-    });
+    const accessIdentity = {
+      session,
+      userKey: getChatStoreUserKey({
+        source: session.source,
+        telegramUserId: session.user?.id,
+      }),
+    };
     const latestMessage = messages[messages.length - 1];
     const lastUserText = getLastUserText(messages);
     const shouldUseSearch = isSearchIntentText(lastUserText);
+    const usageKind = shouldUseSearch ? "search" : "chat";
     const searchTools = {
       web_search: xai.tools.webSearch({
         enableImageUnderstanding: true,
@@ -49,12 +50,31 @@ export async function POST(req: Request) {
       }),
     } as unknown as ToolSet;
 
-    if (session.source === "telegram" && latestMessage?.role === "user") {
-      await consumeChatUserMessageQuota(userKey, latestMessage.id);
+    if (latestMessage?.role === "user") {
+      const accessStatus = await getGoatAccessStatus(accessIdentity);
+
+      if (!accessStatus.allowed) {
+        throw new Error(
+          accessStatus.message ||
+            "Доступ к Goat сейчас закрыт. Нужна активная подписка.",
+        );
+      }
+
+      if (accessStatus.daily.remaining <= 0) {
+        throw new Error("Дневной лимит сообщений закончился.");
+      }
+
+      if (accessStatus.remaining[usageKind] <= 0) {
+        throw new Error(
+          usageKind === "search"
+            ? "Лимит поисковых сообщений закончился."
+            : "Лимит обычных сообщений закончился.",
+        );
+      }
     }
 
     if (conversationId) {
-      await saveChatConversationForUser(userKey, conversationId, messages);
+      await saveChatConversationForUser(accessIdentity.userKey, conversationId, messages);
     }
 
     const result = streamText({
@@ -80,8 +100,16 @@ export async function POST(req: Request) {
           return;
         }
 
+        if (latestMessage?.role === "user") {
+          await consumeGoatAccess({
+            identity: accessIdentity,
+            messageId: latestMessage.id,
+            usageKind,
+          });
+        }
+
         await saveChatConversationForUser(
-          userKey,
+          accessIdentity.userKey,
           conversationId,
           finishedMessages,
         );

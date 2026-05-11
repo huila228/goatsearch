@@ -1,3 +1,4 @@
+import { getGoatAccessStatus } from "@/lib/goat-access";
 import { getTelegramSession } from "@/lib/telegram-auth";
 import {
   getChatStoreUserKey,
@@ -14,8 +15,13 @@ export async function POST(req: Request) {
       telegramUserId: session.user?.id,
     });
 
+    const access = await getGoatAccessStatus({
+      session,
+      userKey,
+    });
     const conversations = await listChatConversationsForUser(userKey);
     const response: ChatHistoryListResponse = {
+      access,
       conversations,
     };
 

@@ -13,6 +13,7 @@ import { EmptySearchState } from "./empty-search-state";
 import { HistorySheet } from "./history-sheet";
 import type {
   ChatConversation,
+  GoatAccessStatus,
   ChatConversationSummary,
   ChatHistoryConversationResponse,
   ChatHistoryDeleteResponse,
@@ -34,8 +35,11 @@ export default function Chat() {
   const [historyConversations, setHistoryConversations] = useState<
     ChatConversationSummary[]
   >([]);
+  const [goatAccessStatus, setGoatAccessStatus] =
+    useState<GoatAccessStatus | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [landingComposerFocused, setLandingComposerFocused] = useState(false);
   const [input, setInput] = useState("");
   const webApp = useMemo(() => getTelegramWebApp(), []);
   const telegramUser = webApp?.initDataUnsafe?.user ?? null;
@@ -63,6 +67,7 @@ export default function Chat() {
       }
 
       const data = JSON.parse(responseText) as ChatHistoryListResponse;
+      setGoatAccessStatus(data.access);
       setHistoryConversations(data.conversations);
     } catch (error) {
       toast.error(
@@ -164,6 +169,7 @@ export default function Chat() {
     setActiveConversationId(null);
     setMessages([]);
     setInput("");
+    setLandingComposerFocused(false);
     setHistoryOpen(false);
   }, [clearError, isLoading, setMessages, stop]);
 
@@ -223,6 +229,15 @@ export default function Chat() {
           return;
         }
 
+        if (goatAccessStatus && !goatAccessStatus.allowed) {
+          toast.error(
+            goatAccessStatus.message ||
+              "Доступ к Goat сейчас закрыт. Нужна активная подписка.",
+            { position: "top-center", richColors: true },
+          );
+          return;
+        }
+
         const conversationId = activeConversationId ?? createConversationId();
 
         setActiveConversationId(conversationId);
@@ -247,6 +262,7 @@ export default function Chat() {
         input={input}
         isLoading={isLoading}
         landing={isEmpty}
+        onFocusChange={setLandingComposerFocused}
         status={status}
         stop={stop}
       />
@@ -261,6 +277,7 @@ export default function Chat() {
         telegramUserName={telegramUser?.first_name}
       />
       <HistorySheet
+        accessStatus={goatAccessStatus}
         activeConversationId={activeConversationId}
         conversations={historyConversations}
         isLoading={historyLoading || isLoading}
@@ -281,7 +298,11 @@ export default function Chat() {
         )}
       >
         {isEmpty ? (
-          <EmptySearchState>{composer}</EmptySearchState>
+          <EmptySearchState
+            compact={landingComposerFocused || input.trim().length > 0}
+          >
+            {composer}
+          </EmptySearchState>
         ) : (
           <>
             <Messages messages={messages} isLoading={isLoading} status={status} />

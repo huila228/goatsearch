@@ -16,15 +16,28 @@ export function useTelegramThemeSync() {
   useEffect(() => {
     const webApp = getTelegramWebApp();
     const root = document.documentElement;
+    const handleVisualViewport = () => {
+      if (!webApp) {
+        handleBrowserViewport();
+        return;
+      }
+
+      applyTelegramViewport(webApp);
+    };
 
     const handleBrowserViewport = () => {
       const viewportHeight =
         window.visualViewport?.height ?? window.innerHeight;
+      const stableHeight = window.innerHeight;
 
       root.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
       root.style.setProperty(
         '--app-stable-height',
-        `${Math.round(window.innerHeight)}px`
+        `${Math.round(stableHeight)}px`
+      );
+      root.style.setProperty(
+        '--app-keyboard-offset',
+        `${Math.max(0, Math.round(stableHeight - viewportHeight))}px`
       );
     };
 
@@ -61,12 +74,17 @@ export function useTelegramThemeSync() {
     webApp.onEvent('viewportChanged', syncViewport);
     webApp.onEvent('safeAreaChanged', syncViewport);
     webApp.onEvent('contentSafeAreaChanged', syncViewport);
+    window.visualViewport?.addEventListener('resize', handleVisualViewport);
 
     return () => {
       webApp.offEvent?.('themeChanged', syncTheme);
       webApp.offEvent?.('viewportChanged', syncViewport);
       webApp.offEvent?.('safeAreaChanged', syncViewport);
       webApp.offEvent?.('contentSafeAreaChanged', syncViewport);
+      window.visualViewport?.removeEventListener(
+        'resize',
+        handleVisualViewport
+      );
     };
   }, []);
 }
@@ -120,19 +138,30 @@ function applyTelegramTheme(webApp: TelegramWebApp) {
 
 function applyTelegramViewport(webApp: TelegramWebApp) {
   const root = document.documentElement;
-  const viewportHeight =
+  const telegramViewportHeight =
     webApp.viewportHeight && Number.isFinite(webApp.viewportHeight)
       ? webApp.viewportHeight
-      : window.visualViewport?.height ?? window.innerHeight;
+      : null;
+  const browserViewportHeight =
+    window.visualViewport?.height ?? window.innerHeight;
+  const viewportHeight =
+    telegramViewportHeight != null
+      ? Math.min(telegramViewportHeight, browserViewportHeight)
+      : browserViewportHeight;
   const stableHeight =
     webApp.viewportStableHeight && Number.isFinite(webApp.viewportStableHeight)
-      ? webApp.viewportStableHeight
+      ? Math.max(webApp.viewportStableHeight, window.innerHeight)
       : window.innerHeight;
 
   const safeInset = webApp.contentSafeAreaInset;
 
   setCssVar(root, '--app-height', `${Math.round(viewportHeight)}px`);
   setCssVar(root, '--app-stable-height', `${Math.round(stableHeight)}px`);
+  setCssVar(
+    root,
+    '--app-keyboard-offset',
+    `${Math.max(0, Math.round(stableHeight - viewportHeight))}px`
+  );
   setCssVar(root, '--app-safe-top', `${Math.round(safeInset?.top ?? 0)}px`);
   setCssVar(root, '--app-safe-right', `${Math.round(safeInset?.right ?? 0)}px`);
   setCssVar(
