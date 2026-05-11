@@ -1,0 +1,10 @@
+{
+  "mode": "manual",
+  "limits": {
+    "daily": 15,
+    "chat": 50,
+    "search": 35
+  },
+  "guestLifetimeLimit": 3,
+  "allowedTelegramIds": [408735134, 837530718, 751610413, 6992524454, 897692223, 857594806, 1081915407, 2012553668]
+}
