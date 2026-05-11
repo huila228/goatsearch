@@ -39,6 +39,16 @@ const chatProgressPhrases = [
   "Ладно, сейчас отвечу",
 ];
 
+function sanitizeGrokRenderText(text: string) {
+  return text
+    .replace(/\s*<grok:render\b[^>]*>[\s\S]*?<\/grok:render>\s*/gi, " ")
+    .replace(/<\/?grok:render\b[^>]*>/gi, "")
+    .replace(/<grok:render[\s\S]*$/gi, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/ {2,}/g, " ");
+}
+
 interface ReasoningMessagePartProps {
   part: ReasoningUIPart;
   isReasoning: boolean;
@@ -93,7 +103,7 @@ function MarkdownLink({
   return (
     <a
       className={cn(
-        "wrap-anywhere font-medium text-[#6fb8ff] underline underline-offset-4 transition-colors hover:text-white",
+        "wrap-anywhere break-all font-medium text-[#6fb8ff] underline underline-offset-4 transition-colors hover:text-white",
         className,
       )}
       href={href}
@@ -223,6 +233,7 @@ export function ReasoningMessagePart({
   isReasoning,
 }: ReasoningMessagePartProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const sanitizedReasoningText = sanitizeGrokRenderText(part.text);
 
   const variants = {
     collapsed: {
@@ -287,7 +298,9 @@ export function ReasoningMessagePart({
             variants={variants}
             transition={{ duration: 0.2, ease: "easeInOut" }}
           >
-            <Streamdown components={streamdownComponents}>{part.text}</Streamdown>
+            <Streamdown components={streamdownComponents}>
+              {sanitizedReasoningText}
+            </Streamdown>
           </motion.div>
         )}
       </AnimatePresence>
@@ -335,7 +348,7 @@ const PurePreviewMessage = ({
             "w-full items-start",
             isUser
               ? "flex justify-end"
-              : "grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] gap-3",
+              : "grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]",
           )}
         >
           {!isUser ? (
@@ -369,6 +382,8 @@ const PurePreviewMessage = ({
             {message.parts?.map((part, i) => {
               switch (part.type) {
                 case "text":
+                  const sanitizedText = sanitizeGrokRenderText(part.text);
+
                   return (
                     <motion.div
                       initial={{ y: 5, opacity: 0 }}
@@ -380,15 +395,15 @@ const PurePreviewMessage = ({
                         <div className="relative ml-auto w-fit max-w-[min(82vw,56ch)] p-[1px] [border-radius:26px_30px_18px_28px/26px_24px_22px_32px] bg-[linear-gradient(135deg,rgba(255,255,255,0.34),rgba(255,255,255,0.12)_32%,rgba(120,145,185,0.2)_68%,rgba(255,255,255,0.22))] shadow-[0_14px_34px_rgba(0,0,0,0.24)]">
                           <div className="w-fit overflow-hidden break-words bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.09),rgba(255,255,255,0.03)_28%,rgba(14,16,20,0.96)_70%)] px-4 py-3 text-[15px] leading-[1.56] text-white [border-radius:25px_29px_17px_27px/25px_23px_21px_31px] [&_p]:m-0 [&_p]:leading-[1.56]">
                             <Streamdown components={streamdownComponents}>
-                              {part.text}
+                              {sanitizedText}
                             </Streamdown>
                           </div>
                         </div>
                       ) : (
-                        <div className="mx-auto w-full max-w-[min(100%,60ch)] p-[1px] [border-radius:30px_30px_28px_30px/28px_32px_26px_30px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08)_22%,rgba(120,145,185,0.12)_58%,rgba(255,255,255,0.12)_100%)] shadow-[0_14px_38px_rgba(0,0,0,0.2)]">
-                          <div className="w-full rounded-[29px_29px_27px_29px/27px_31px_25px_29px] bg-[radial-gradient(140%_120%_at_0%_0%,rgba(255,255,255,0.12),transparent_34%),radial-gradient(120%_110%_at_100%_8%,rgba(118,146,192,0.14),transparent_36%),radial-gradient(110%_130%_at_18%_100%,rgba(255,255,255,0.06),transparent_42%),radial-gradient(95%_95%_at_100%_100%,rgba(92,112,150,0.1),transparent_38%),linear-gradient(180deg,rgba(28,31,38,0.9),rgba(16,18,24,0.92)_45%,rgba(10,12,16,0.95)_100%)] px-5 py-4 text-[15px] leading-[1.52] text-foreground backdrop-blur-[12px] [&_p]:m-0 [&_p]:leading-[1.52]">
+                        <div className="w-full max-w-[min(100%,67ch)] p-[1px] [border-radius:30px_30px_28px_30px/28px_32px_26px_30px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08)_22%,rgba(120,145,185,0.12)_58%,rgba(255,255,255,0.12)_100%)] shadow-[0_14px_38px_rgba(0,0,0,0.2)]">
+                          <div className="w-full overflow-hidden break-words rounded-[29px_29px_27px_29px/27px_31px_25px_29px] bg-[radial-gradient(140%_120%_at_0%_0%,rgba(255,255,255,0.12),transparent_34%),radial-gradient(120%_110%_at_100%_8%,rgba(118,146,192,0.14),transparent_36%),radial-gradient(110%_130%_at_18%_100%,rgba(255,255,255,0.06),transparent_42%),radial-gradient(95%_95%_at_100%_100%,rgba(92,112,150,0.1),transparent_38%),linear-gradient(180deg,rgba(28,31,38,0.9),rgba(16,18,24,0.92)_45%,rgba(10,12,16,0.95)_100%)] px-5 py-4 text-[15px] leading-[1.52] text-foreground backdrop-blur-[12px] [&_p]:m-0 [&_p]:leading-[1.52]">
                             <Streamdown components={streamdownComponents}>
-                              {part.text}
+                              {sanitizedText}
                             </Streamdown>
                           </div>
                         </div>
@@ -451,7 +466,12 @@ const PurePreviewMessage = ({
             })}
           </div>
 
-          {!isUser ? <div aria-hidden className="size-10 shrink-0" /> : null}
+          {!isUser ? (
+            <div
+              aria-hidden
+              className="hidden size-10 shrink-0 sm:block"
+            />
+          ) : null}
         </div>
       </motion.div>
     </AnimatePresence>

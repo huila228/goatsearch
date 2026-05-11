@@ -3,10 +3,12 @@ import { ArrowUp } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const animatedQueries = [
-  "Сколько варить рис",
+  "зачем блокируют интернет",
   "Какая актриса в фулле 18+ клэш рояль из тиктока",
   "Как обойти белые списки",
   "мем бурмолдим за гаражами",
+  "как найти точку G у девушки",
+  "Как правильно курить травку",
 ];
 
 interface InputProps {
@@ -67,7 +69,14 @@ export const Textarea = ({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [animatedPlaceholder, animatedQueryIndex, input, isDeleting, isFocused, landing]);
+  }, [
+    animatedPlaceholder,
+    animatedQueryIndex,
+    input,
+    isDeleting,
+    isFocused,
+    landing,
+  ]);
 
   if (landing) {
     return (

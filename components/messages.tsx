@@ -22,10 +22,10 @@ export const Messages = ({
   return (
     <div className="relative flex-1">
       <div
-        className="absolute inset-0 overflow-y-auto"
+        className="chat-scrollbar absolute inset-0 overflow-y-auto pr-1 sm:pr-2"
         ref={containerRef}
       >
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-0 pb-2 pt-[74px] sm:gap-5 sm:pt-[78px]">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-0 pb-2 pr-2 pt-[74px] sm:gap-5 sm:pr-3 sm:pt-[78px]">
           {messages.map((m, i) => (
             <div key={i} className={i === 0 ? "mt-auto" : undefined}>
               <Message
